@@ -1,84 +1,53 @@
+import numpy as np
 from torch import nn
+from torch.nn import functional as F
+
+
+def split_last(x, shape):
+    "split the last dimension to given shape"
+    shape = list(shape)
+    assert shape.count(-1) <= 1
+    if -1 in shape:
+        shape[shape.index(-1)] = int(x.size(-1) / -np.prod(shape))
+    return x.view(*x.size()[:-1], *shape)
+
+def merge_last(x, n_dims):
+    "merge the last n_dims to a dimension"
+    s = x.size()
+    assert n_dims > 1 and n_dims < len(s)
+    return x.view(*s[:-n_dims], -1)
 
 class Multihead_Attention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.):
+    """Multi-Headed Dot Product Attention"""
+    def __init__(self, dim, num_heads, dropout):
         super().__init__()
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
-        # NOTE scale factor was wrong in my original version, can set manually to be compat with prev weights
-        if qk_scale is None:
-            self.scale = head_dim ** -0.5
-        else:
-            self.scale = qk_scale
+        self.proj_q = nn.Linear(dim, dim)
+        self.proj_k = nn.Linear(dim, dim)
+        self.proj_v = nn.Linear(dim, dim)
+        self.drop = nn.Dropout(dropout)
+        self.n_heads = num_heads
+        self.scores = None # for visualization
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(dim, dim)
-        self.proj_drop = nn.Dropout(proj_drop)
-        self.dim = dim
+    def forward(self, x, mask):
+        """
+        x, q(query), k(key), v(value) : (B(batch_size), S(seq_len), D(dim))
+        mask : (B(batch_size) x S(seq_len))
+        * split D(dim) into (H(n_heads), W(width of head)) ; D = H * W
+        """
+        # (B, S, D) -proj-> (B, S, D) -split-> (B, S, H, W) -trans-> (B, H, S, W)
+        q, k, v = self.proj_q(x), self.proj_k(x), self.proj_v(x)
+        q, k, v = (split_last(x, (self.n_heads, -1)).transpose(1, 2) for x in [q, k, v])
+        # (B, H, S, W) @ (B, H, W, S) -> (B, H, S, S) -softmax-> (B, H, S, S)
+        scores = q @ k.transpose(-2, -1) / np.sqrt(k.size(-1))
+        if mask is not None:
+            mask = mask[:, None, None, :].float()
+            scores -= 10000.0 * (1.0 - mask)
+        scores = self.drop(F.softmax(scores, dim=-1))
+        # (B, H, S, S) @ (B, H, S, W) -> (B, H, S, W) -trans-> (B, S, H, W)
+        h = (scores @ v).transpose(1, 2).contiguous()
+        # -merge-> (B, S, D)
+        h = merge_last(h, 2)
+        self.scores = scores
+        return h
 
-    def forward(self, x):
-        B, N, C = x.shape
-        # print('for attention',x.shape)
-        # print(self.scale)
-        q, k, v = self.qkv(x).reshape(B, N, 3, self.num_heads,
-                                      C // self.num_heads).permute(2, 0, 3, 1, 4)
-        # print(q.shape,k.shape,v.shape)
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
-
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
-        x = self.proj(x)
-        x = self.proj_drop(x)
-        return x
-
-
-# import torch
-# import torch.nn as nn
-# import torch.nn.functional as F
-
-# class Multihead_Attention(nn.Module):
-#     def __init__(self, embed_dim, num_heads):
-#         super().__init__()
-#         assert embed_dim % num_heads == 0, "Embedding dimension must be divisible by number of heads"
-
-#         self.num_heads = num_heads
-#         self.head_dim = embed_dim // num_heads
-
-#         self.q_linear = nn.Linear(embed_dim, embed_dim)
-#         self.k_linear = nn.Linear(embed_dim, embed_dim)
-#         self.v_linear = nn.Linear(embed_dim, embed_dim)
-#         self.out_linear = nn.Linear(embed_dim, embed_dim)
-
-#     def scaled_dot_product_attention(self, q, k, v, mask=None):
-#         scores = torch.matmul(q, k.transpose(-2, -1)) / (self.head_dim ** 0.5)
-        
-#         if mask is not None:
-#             scores = scores.masked_fill(mask == 0, float('-inf'))
-
-#         attn_weights = F.softmax(scores, dim=-1)
-#         output = torch.matmul(attn_weights, v)
-#         return output, attn_weights
-
-#     def forward(self, query, key, value, mask=None):
-#         batch_size = query.size(0)
-        
-#         # Linear projections
-#         q = self.q_linear(query).view(batch_size, -1, self.num_heads, self.head_dim)
-#         k = self.k_linear(key).view(batch_size, -1, self.num_heads, self.head_dim)
-#         v = self.v_linear(value).view(batch_size, -1, self.num_heads, self.head_dim)
-
-#         q = q.transpose(1, 2)  # (batch_size, num_heads, seq_len, head_dim)
-#         k = k.transpose(1, 2)  # (batch_size, num_heads, seq_len, head_dim)
-#         v = v.transpose(1, 2)  # (batch_size, num_heads, seq_len, head_dim)
-
-#         # Scaled dot-product attention
-#         output, attn_weights = self.scaled_dot_product_attention(q, k, v, mask)
-
-#         # Concatenate heads and apply final linear layer
-#         output = output.transpose(1, 2).contiguous().view(batch_size, -1, self.num_heads * self.head_dim)
-#         output = self.out_linear(output)
-        
-#         return output, attn_weights
 

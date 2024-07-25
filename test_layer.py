@@ -38,9 +38,11 @@ from torch import nn
 
 def main():
     image = torch.randn(1,3,224,224)
-    vit = ViT()
+    vit = ViT('B_16_imagenet1k', pretrained=True, image_size=224)
     output = vit(image)
     print(output.shape)
+    # for name, param in vit.named_parameters():
+    #   print(name, "  ", param)
     return
 
 if __name__ == "__main__":

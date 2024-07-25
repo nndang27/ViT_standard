@@ -1,19 +1,13 @@
 from torch import nn
-
+from torch.nn import functional as F
+    
 class MLP(nn.Module):
-    def __init__(self, embedding_dim:int = 768, mlp_size:int = 3072, dropout_por:float = 0.1):
+    """FeedForward Neural Networks for each position"""
+    def __init__(self, dim, ff_dim):
         super().__init__()
-        self.norm = nn.LayerNorm(normalized_shape=embedding_dim)
+        self.fc1 = nn.Linear(dim, ff_dim)
+        self.fc2 = nn.Linear(ff_dim, dim)
 
-        self.mlp = nn.Sequential(
-            nn.Linear(in_features=embedding_dim, out_features=mlp_size),
-            nn.GELU(),
-            nn.Dropout(p = dropout_por),
-            nn.Linear(in_features=mlp_size , out_features=embedding_dim),
-            nn.Dropout(p = dropout_por)
-        )
     def forward(self, x):
-        x = self.norm(x)
-        x = self.mlp(x)
-
-        return x
+        # (B, S, D) -> (B, S, D_ff) -> (B, S, D)
+        return self.fc2(F.gelu(self.fc1(x)))

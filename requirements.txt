@@ -1,3 +1,6 @@
 yacs
 pytorch-ignite
 torch
+torchvision
+torch-summary
+roboflow

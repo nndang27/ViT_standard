@@ -2,19 +2,33 @@ from torch import nn
 from .multihead_attention import Multihead_Attention
 from .mlp import MLP
 
-class TransformerEncoderBlock(nn.Module):
-    #2. Khởi tạo lớp với các tham số siêu từ Bảng 1 và Bảng 3 của bài báo ViT cho mô hình ViT-Base. 
-    def __init__(self,embedding_dim:int=768,num_heads:int=12,mlp_size:int=3072,mlp_dropout:float=0.1,attn_dropout:float=0):
+class Block(nn.Module):
+    """Transformer Block"""
+    def __init__(self, dim, num_heads, ff_dim, dropout):
         super().__init__()
-        #3. Khởi tạo một khối MSA
-        self.msa_block=Multihead_Attention(dim=embedding_dim,num_heads=num_heads,attn_drop=attn_dropout)
-        #4.Khởi tạo một khối MLP
-        self.mlp_block=MLP(embedding_dim=embedding_dim,mlp_size=mlp_size,dropout_por=mlp_dropout)
-    
-    #5. Tạo 1 phương thức forward
-    def forward(self,x):
-        #6. Tạo kết nối bỏ qua cho khối MSA Block(Thêm Input vào output)
-        x=self.msa_block(x)+x
-        #7. Tạo kết nối bỏ qua cho khối MLP(Thêm Input vào output)
-        x=self.mlp_block(x)+x
+        self.attn = Multihead_Attention(dim, num_heads, dropout)
+        self.proj = nn.Linear(dim, dim)
+        self.norm1 = nn.LayerNorm(dim, eps=1e-6)
+        self.pwff = MLP(dim, ff_dim)
+        self.norm2 = nn.LayerNorm(dim, eps=1e-6)
+        self.drop = nn.Dropout(dropout)
+
+    def forward(self, x, mask):
+        h = self.drop(self.proj(self.attn(self.norm1(x), mask)))
+        x = x + h
+        h = self.drop(self.pwff(self.norm2(x)))
+        x = x + h
+        return x
+
+
+class TransformerEncoderBlock(nn.Module):
+    """Transformer with Self-Attentive Blocks"""
+    def __init__(self, num_layers, dim, num_heads, ff_dim, dropout):
+        super().__init__()
+        self.blocks = nn.ModuleList([
+            Block(dim, num_heads, ff_dim, dropout) for _ in range(num_layers)])
+
+    def forward(self, x, mask=None):
+        for block in self.blocks:
+            x = block(x, mask)
         return x
