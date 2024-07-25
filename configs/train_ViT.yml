@@ -1,0 +1,7 @@
+SOLVER:
+  BASE_LR: 0.01
+  WEIGHT_DECAY: 0.0001
+  IMS_PER_BATCH: 128
+
+
+OUTPUT_DIR: "./output"

@@ -1,0 +1,15 @@
+2024-07-24 22:54:20,425 template_model INFO: Running with config:
+DATALOADER:
+  
+DATASET:
+  
+INPUT:
+  
+MODEL:
+  NUM_CLASSES: 8
+  NUM_HEADS: 64
+OUTPUT_DIR: ./output
+SOLVER:
+  BASE_LR: 0.01
+  IMS_PER_BATCH: 128
+  WEIGHT_DECAY: 0.0001

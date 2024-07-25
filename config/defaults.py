@@ -1,0 +1,20 @@
+from yacs.config import CfgNode as CN
+
+_C = CN()
+
+_C.MODEL = CN()
+_C.MODEL.NUM_CLASSES = 8
+_C.MODEL.NUM_HEADS = 12
+
+_C.INPUT = CN()
+
+_C.DATASET = CN()
+
+_C.DATALOADER = CN()
+
+_C.SOLVER = CN()
+_C.SOLVER.BASE_LR= 0.01
+_C.SOLVER.WEIGHT_DECAY= 0.0001
+_C.SOLVER.IMS_PER_BATCH= 128
+
+_C.OUTPUT_DIR = ""
